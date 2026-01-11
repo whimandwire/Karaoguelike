@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Karaoguelike</title>
+  <style>
+    :root { --pad: 14px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#0b0c10; color:#f4f4f6; }
+    header { padding: 18px var(--pad); border-bottom: 1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center; justify-content:space-between; }
+    h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+    .wrap { padding: var(--pad); max-width: 1100px; margin: 0 auto; }
+    .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 14px; }
+    .grid { display:grid; grid-template-columns: 360px 1fr; gap: 14px; }
+    @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
+
+    .btn { background:#fff; color:#000; border:0; padding: 10px 12px; border-radius: 12px; font-weight: 650; cursor:pointer; }
+    .btn.secondary { background: rgba(255,255,255,.10); color:#fff; border: 1px solid rgba(255,255,255,.14); }
+    .btn:disabled { opacity: .55; cursor:not-allowed; }
+
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .muted { color: rgba(255,255,255,.70); font-size: 12px; line-height: 1.4; }
+    .tiny { color: rgba(255,255,255,.55); font-size: 11px; }
+
+    .decklist { display:flex; flex-direction:column; gap: 10px; margin-top: 10px; }
+    label.deck { display:flex; justify-content:space-between; gap: 10px; align-items:center; padding: 10px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.03); }
+    label.deck input { transform: scale(1.1); }
+    .pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.85); }
+
+    .results { display:flex; flex-direction:column; gap: 12px; }
+    .resultTitle { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+    .resultTitle strong { font-size: 13px; }
+    .drawn { font-size: 20px; font-weight: 750; margin: 6px 0 0 0; letter-spacing: .2px; }
+    ul { margin: 8px 0 0 18px; }
+    li { margin: 4px 0; }
+
+    .error { color: #ffb3b3; }
+    .ok { color: #b7ffcd; }
+    .spinner { display:inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    code.inline { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Karaoguelike</h1>
+    <div class="row">
+      <button class="btn secondary" id="btnReload">Reload data</button>
+      <button class="btn" id="btnDraw" disabled>Draw cards</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <div>
+            <div class="muted">Data source</div>
+            <div class="tiny">Google Sheets → published CSV</div>
+          </div>
+          <div id="status" class="pill">Not loaded</div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="muted">Configure</div>
+          <div class="tiny" style="margin-top:6px;">
+            Fill in <code class="inline">SHEET_ID</code> and <code class="inline">GIDS</code> in the script.
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <div class="muted">Decks in play</div>
+          <div class="decklist" id="deckList"></div>
+        </div>
+
+        <div style="margin-top:14px;" class="row">
+          <button class="btn secondary" id="btnSelectAll">Select all</button>
+          <button class="btn secondary" id="btnSelectNone">Select none</button>
+        </div>
+
+        <div style="margin-top:10px;" class="tiny">
+          Tip: turn off “Specific Artist” if you want more open rounds.
+        </div>
+
+        <div id="err" class="tiny error" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="resultTitle">
+          <strong>Draw</strong>
+          <span class="tiny">Suggestions will appear if found in the matching tab.</span>
+        </div>
+        <div class="results" id="results" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /***********************
+     * 1) PUT YOUR SHEET INFO HERE
+     ***********************/
+    const SHEET_ID = "1VVc9gd_vKWa1xQie_Kp1UW07fuZbb8HgiOvdW4dPVGQ";
+
+    // gid values for each tab (get them from the URL when viewing that tab)
+    const GIDS = {
+      MAIN: "210868448",                 // e.g. "0"
+      "Artist Category": "2134899012",
+      "Specific Artist": "933810467",
+      "Era": "2053657456",
+      "Genre": "308425524",
+      "Prompt": "1185779772",
+      "Song Title Rule": "186500093"
+    };
+
+    /***********************
+     * 2) HELPERS
+     ***********************/
+    function csvUrl(gid) {
+      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+    }
+
+    function parseCSV(text) {
+      // Simple CSV parser (handles quotes + commas).
+      // If you ever use newlines inside quoted cells, we can swap to a heavier parser.
+      const rows = [];
+      let row = [], cell = "", inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"' ) {
+          if (inQuotes && next === '"') { cell += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (c === ',' && !inQuotes) {
+          row.push(cell); cell = "";
+        } else if ((c === '\n' || c === '\r') && !inQuotes) {
+          if (c === '\r' && next === '\n') i++;
+          row.push(cell); cell = "";
+          if (row.length > 1 || row[0] !== "") rows.push(row);
+          row = [];
+        } else {
+          cell += c;
+        }
+      }
+      // last cell
+      if (cell.length || row.length) { row.push(cell); rows.push(row); }
+      return rows.map(r => r.map(x => (x ?? "").trim()));
+    }
+
+    function uniq(arr) {
+      return [...new Set(arr.filter(Boolean))];
+    }
+
+    function sample(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function setStatus(text, ok=true) {
+      const el = document.getElementById("status");
+      el.textContent = text;
+      el.className = "pill " + (ok ? "ok" : "");
+    }
+
+    /***********************
+     * 3) APP STATE
+     ***********************/
+    let decks = {};          // { deckName: [cards...] }
+    let suggestions = {};    // { deckName: Map(cardName -> [suggestions...]) }
+    let selectedDecks = new Set();
+
+    const DEFAULT_DECK_ORDER = ["Artist Category", "Specific Artist", "Era", "Genre", "Prompt", "Song Title Rule"];
+
+    /***********************
+     * 4) LOAD DATA
+     ***********************/
+    async function loadAll() {
+      const errEl = document.getElementById("err");
+      errEl.textContent = "";
+      setStatus("Loading…", true);
+      document.getElementById("btnDraw").disabled = true;
+      document.getElementById("deckList").innerHTML = "";
+      document.getElementById("results").innerHTML = "";
+
+      try {
+        // Load MAIN
+        if (!SHEET_ID.includes("PASTE") && GIDS.MAIN && !GIDS.MAIN.includes("PASTE")) {
+          // ok
+        } else {
+          throw new Error("You still need to paste your SHEET_ID and gid values into the script.");
+        }
+
+        const mainResp = await fetch(csvUrl(GIDS.MAIN));
+        if (!mainResp.ok) throw new Error("Couldn't fetch MAIN. Make sure the sheet is published and gid is correct.");
+        const mainText = await mainResp.text();
+        const mainRows = parseCSV(mainText);
+
+        // Expect headers in row 0
+        const headers = mainRows[0];
+        const dataRows = mainRows.slice(1);
+
+        // Build decks from columns: each header is a deck name; cards are unique non-empty cells under it.
+        decks = {};
+        headers.forEach((h, idx) => {
+          const colCards = uniq(dataRows.map(r => (r[idx] || "").trim()).filter(Boolean));
+          if (h && colCards.length) decks[h] = colCards;
+        });
+
+        // Deck selection defaults: all on
+        selectedDecks = new Set(Object.keys(decks));
+
+        // Load suggestions tabs
+        suggestions = {};
+        for (const deckName of Object.keys(decks)) {
+          if (!GIDS[deckName]) continue; // no matching tab
+          const gid = GIDS[deckName];
+          if (!gid || gid.includes("PASTE")) continue;
+
+          const resp = await fetch(csvUrl(gid));
+          if (!resp.ok) continue;
+          const text = await resp.text();
+          const rows = parseCSV(text);
+          if (rows.length < 2) continue;
+
+          // Expect first column = card name, remaining columns = suggestions (or a single "Suggestions" cell).
+          const map = new Map();
+          for (const r of rows.slice(1)) {
+            const key = (r[0] || "").trim();
+            if (!key) continue;
+            const rest = r.slice(1).filter(Boolean).map(x => x.trim());
+            // If they used one cell with multiple suggestions separated by ";" or "|", split it
+            let sugg = [];
+            if (rest.length === 1 && (rest[0].includes(";") || rest[0].includes("|"))) {
+              sugg = rest[0].split(/[;|]/).map(s => s.trim()).filter(Boolean);
+            } else {
+              sugg = rest;
+            }
+            map.set(key, sugg);
+          }
+          suggestions[deckName] = map;
+        }
+
+        renderDeckToggles();
+        setStatus("Loaded", true);
+        document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
+      } catch (e) {
+        setStatus("Error", false);
+        errEl.textContent = e.message || String(e);
+      }
+    }
+
+    /***********************
+     * 5) UI
+     ***********************/
+    function renderDeckToggles() {
+      const deckList = document.getElementById("deckList");
+      deckList.innerHTML = "";
+
+      const ordered = DEFAULT_DECK_ORDER
+        .filter(d => decks[d])
+        .concat(Object.keys(decks).filter(d => !DEFAULT_DECK_ORDER.includes(d)));
+
+      for (const deckName of ordered) {
+        const count = decks[deckName]?.length ?? 0;
+        const label = document.createElement("label");
+        label.className = "deck";
+
+        const left = document.createElement("div");
+        const title = document.createElement("div");
+        title.style.fontWeight = "700";
+        title.style.fontSize = "13px";
+        title.textContent = deckName;
+
+        const sub = document.createElement("div");
+        sub.className = "tiny";
+        sub.textContent = `${count} cards`;
+
+        left.appendChild(title);
+        left.appendChild(sub);
+
+        const right = document.createElement("div");
+        right.className = "row";
+        const pill = document.createElement("span");
+        pill.className = "pill";
+        pill.textContent = suggestions[deckName] ? "has suggestions" : "no suggestions";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = selectedDecks.has(deckName);
+        cb.addEventListener("change", () => {
+          if (cb.checked) selectedDecks.add(deckName);
+          else selectedDecks.delete(deckName);
+          document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
+        });
+
+        right.appendChild(pill);
+        right.appendChild(cb);
+
+        label.appendChild(left);
+        label.appendChild(right);
+        deckList.appendChild(label);
+      }
+    }
+
+    function draw() {
+      const resultsEl = document.getElementById("results");
+      resultsEl.innerHTML = "";
+
+      for (const deckName of DEFAULT_DECK_ORDER.filter(d => selectedDecks.has(d))) {
+        addDrawnCard(deckName);
+      }
+      // Any additional decks not in default order:
+      for (const deckName of Object.keys(decks).filter(d => selectedDecks.has(d) && !DEFAULT_DECK_ORDER.includes(d))) {
+        addDrawnCard(deckName);
+      }
+    }
+
+    function addDrawnCard(deckName) {
+      const cards = decks[deckName] || [];
+      if (!cards.length) return;
+
+      const cardName = sample(cards);
+
+      const box = document.createElement("div");
+      box.className = "card";
+      box.style.background = "rgba(255,255,255,.03)";
+      box.style.borderColor = "rgba(255,255,255,.10)";
+
+      const top = document.createElement("div");
+      top.className = "row";
+      top.style.justifyContent = "space-between";
+
+      const label = document.createElement("div");
+      label.className = "muted";
+      label.textContent = deckName;
+
+      const reroll = document.createElement("button");
+      reroll.className = "btn secondary";
+      reroll.textContent = "Reroll";
+      reroll.style.padding = "7px 10px";
+      reroll.style.borderRadius = "10px";
+      reroll.addEventListener("click", () => {
+        // replace this box contents with a new draw
+        box.replaceWith(makeDrawnBox(deckName));
+      });
+
+      top.appendChild(label);
+      top.appendChild(reroll);
+
+      box.appendChild(top);
+
+      const drawn = document.createElement("div");
+      drawn.className = "drawn";
+      drawn.textContent = cardName;
+      box.appendChild(drawn);
+
+      const suggList = suggestions[deckName]?.get(cardName) || [];
+      if (suggList.length) {
+        const ul = document.createElement("ul");
+        for (const s of suggList) {
+          const li = document.createElement("li");
+          li.textContent = s;
+          ul.appendChild(li);
+        }
+        box.appendChild(ul);
+      } else {
+        const none = document.createElement("div");
+        none.className = "tiny";
+        none.style.marginTop = "8px";
+        none.textContent = "No suggestions found for this card.";
+        box.appendChild(none);
+      }
+
+      document.getElementById("results").appendChild(box);
+    }
+
+    function makeDrawnBox(deckName) {
+      // helper used by reroll
+      const cards = decks[deckName] || [];
+      const cardName = sample(cards);
+
+      const box = document.createElement("div");
+      box.className = "card";
+      box.style.background = "rgba(255,255,255,.03)";
+      box.style.borderColor = "rgba(255,255,255,.10)";
+
+      const top = document.createElement("div");
+      top.className = "row";
+      top.style.justifyContent = "space-between";
+
+      const label = document.createElement("div");
+      label.className = "muted";
+      label.textContent = deckName;
+
+      const reroll = document.createElement("button");
+      reroll.className = "btn secondary";
+      reroll.textContent = "Reroll";
+      reroll.style.padding = "7px 10px";
+      reroll.style.borderRadius = "10px";
+      reroll.addEventListener("click", () => {
+        box.replaceWith(makeDrawnBox(deckName));
+      });
+
+      top.appendChild(label);
+      top.appendChild(reroll);
+
+      box.appendChild(top);
+
+      const drawn = document.createElement("div");
+      drawn.className = "drawn";
+      drawn.textContent = cardName;
+      box.appendChild(drawn);
+
+      const suggList = suggestions[deckName]?.get(cardName) || [];
+      if (suggList.length) {
+        const ul = document.createElement("ul");
+        for (const s of suggList) {
+          const li = document.createElement("li");
+          li.textContent = s;
+          ul.appendChild(li);
+        }
+        box.appendChild(ul);
+      } else {
+        const none = document.createElement("div");
+        none.className = "tiny";
+        none.style.marginTop = "8px";
+        none.textContent = "No suggestions found for this card.";
+        box.appendChild(none);
+      }
+
+      return box;
+    }
+
+    /***********************
+     * 6) EVENTS
+     ***********************/
+    document.getElementById("btnReload").addEventListener("click", loadAll);
+    document.getElementById("btnDraw").addEventListener("click", draw);
+
+    document.getElementById("btnSelectAll").addEventListener("click", () => {
+      selectedDecks = new Set(Object.keys(decks));
+      renderDeckToggles();
+      document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
+    });
+
+    document.getElementById("btnSelectNone").addEventListener("click", () => {
+      selectedDecks = new Set();
+      renderDeckToggles();
+      document.getElementById("btnDraw").disabled = true;
+    });
+
+    // Initial load
+    loadAll();
+  </script>
+</body>
+</html>
