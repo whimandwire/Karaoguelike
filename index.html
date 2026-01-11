@@ -124,6 +124,11 @@
       border: 1px solid rgba(255,255,255,.2);
       animation: float 4s ease-in-out infinite;
     }
+    .kara-card .drawn {
+      background: linear-gradient(120deg, #fff, #ffe6ff);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
     .kara-card::after {
       content: "";
       position: absolute;
@@ -132,6 +137,58 @@
       transform: translateX(-120%);
       animation: shimmer 4s ease-in-out infinite;
       pointer-events: none;
+    }
+    .chaos-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 22px;
+      border: 2px solid rgba(255,207,86,.7);
+      background:
+        radial-gradient(circle at 20% 20%, rgba(255,79,216,.55), transparent 45%),
+        radial-gradient(circle at 80% 20%, rgba(53,242,255,.6), transparent 45%),
+        radial-gradient(circle at 50% 80%, rgba(255,207,86,.4), transparent 55%),
+        linear-gradient(140deg, rgba(10,10,20,.95), rgba(40,10,60,.9));
+      box-shadow:
+        0 0 20px rgba(255,79,216,.35),
+        0 0 30px rgba(53,242,255,.25),
+        0 20px 40px rgba(5,5,15,.6);
+      animation: wobble 2.6s ease-in-out infinite;
+    }
+    .chaos-card::before {
+      content: "⚡ CHAOS CARD ⚡";
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      font-size: 11px;
+      letter-spacing: 1.6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,255,255,.35);
+      color: #fff2a6;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(255,207,86,.6);
+    }
+    .chaos-card .drawn {
+      text-shadow:
+        0 0 18px rgba(255,79,216,.8),
+        0 0 28px rgba(53,242,255,.6);
+      color: #fff9db;
+    }
+    .chaos-desc {
+      margin: 12px 0 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: rgba(255,255,255,.9);
+    }
+    .chaos-lock {
+      border: 1px dashed rgba(255,207,86,.5);
+      background: rgba(255,207,86,.08);
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #ffe9a9;
+      margin-top: 8px;
     }
     .idea-list { margin: 10px 0 0 18px; }
     .idea-list li { margin: 6px 0; }
@@ -142,6 +199,10 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
     @keyframes shimmer { 0%, 100% { transform: translateX(-120%); } 45%, 60% { transform: translateX(120%); } }
+    @keyframes wobble {
+      0%, 100% { transform: rotate(-0.6deg) translateY(0); }
+      50% { transform: rotate(0.6deg) translateY(-4px); }
+    }
 
     .hero {
       display:flex;
@@ -174,7 +235,7 @@
     <div class="row full-mobile">
       <button class="btn secondary" id="btnReload">Reload data</button>
       <button class="btn accent" id="btnDraw" disabled>Draw a card</button>
-      <button class="btn secondary" id="btnChaos" disabled>Add chaos card</button>
+      <button class="btn secondary" id="btnChaos" disabled>Chaos card</button>
       <button class="btn secondary" id="btnReset">End turn</button>
     </div>
   </header>
@@ -185,8 +246,8 @@
         <div class="hero">
           <div class="row" style="justify-content:space-between; align-items:flex-start;">
             <div>
-              <h2>Shuffle the karaoke chaos ✨</h2>
-              <p>Pick your decks, draw one card at a time, and stack extra chaos when you want more spice.</p>
+              <h2>Shuffle the karaoke chaos 🎤✨</h2>
+              <p>Pick your decks, draw fresh categories one-by-one, and unleash chaos only when you are ready to lock in your song.</p>
             </div>
             <div id="status" class="pill">Not loaded</div>
           </div>
@@ -213,7 +274,7 @@
       <div class="card">
         <div class="resultTitle">
           <strong>Draw</strong>
-          <span class="tiny">One card at a time. Add chaos when you want more.</span>
+          <span class="tiny">Each draw adds a new category. Chaos locks the turn.</span>
         </div>
         <div class="results" id="results" style="margin-top:10px;"></div>
       </div>
@@ -311,8 +372,13 @@
     let decks = {};          // { deckName: [cards...] }
     let suggestions = {};    // { deckName: Map(cardName -> [suggestions...]) }
     let selectedDecks = new Set();
+    let chaosCards = [];
+    let chaosEnabled = true;
+    let chaosUsed = false;
 
     const DEFAULT_DECK_ORDER = ["Artist Category", "Specific Artist", "Era", "Genre", "Prompt", "Song Title Rule"];
+    const CHAOS_TITLE_INDEX = 6;
+    const CHAOS_DESC_INDEX = 7;
 
     /***********************
      * 4) LOAD DATA
@@ -325,6 +391,7 @@
       document.getElementById("btnChaos").disabled = true;
       document.getElementById("deckList").innerHTML = "";
       document.getElementById("results").innerHTML = "";
+      chaosUsed = false;
 
       try {
         if (!CSV_URLS.MAIN) throw new Error("Missing CSV_URLS.MAIN.");
@@ -338,16 +405,32 @@
         const dataRows = mainRows.slice(1);
 
         decks = {};
+        chaosCards = [];
+        const chaosMap = new Map();
         headers.forEach((h, idx) => {
           if (!h) return;
+          if (idx === CHAOS_TITLE_INDEX || idx === CHAOS_DESC_INDEX) return;
           const colCards = uniq(dataRows.map(r => (r[idx] || "").trim()).filter(Boolean));
           if (colCards.length) decks[h] = colCards;
         });
+
+        for (const row of dataRows) {
+          const title = (row[CHAOS_TITLE_INDEX] || "").trim();
+          if (!title) continue;
+          if (!chaosMap.has(title)) {
+            chaosMap.set(title, {
+              title,
+              description: (row[CHAOS_DESC_INDEX] || "").trim()
+            });
+          }
+        }
+        chaosCards = Array.from(chaosMap.values());
 
         if (!Object.keys(decks).length) throw new Error("No decks found in MAIN. Check your header row and data.");
 
         // default selection: all on
         selectedDecks = new Set(Object.keys(decks));
+        chaosEnabled = chaosCards.length > 0;
 
         // --- Load Suggestions Tabs ---
         suggestions = {};
@@ -385,8 +468,7 @@
 
         renderDeckToggles();
         setStatus("Loaded", true);
-        document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
-        document.getElementById("btnChaos").disabled = selectedDecks.size === 0;
+        updateActionStates();
       } catch (e) {
         setStatus("Error", false);
         errEl.textContent = e?.message || String(e);
@@ -432,8 +514,7 @@
         cb.addEventListener("change", () => {
           if (cb.checked) selectedDecks.add(deckName);
           else selectedDecks.delete(deckName);
-          document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
-          document.getElementById("btnChaos").disabled = selectedDecks.size === 0;
+          updateActionStates();
         });
 
         right.appendChild(cb);
@@ -442,17 +523,74 @@
         label.appendChild(right);
         deckList.appendChild(label);
       }
+
+      if (chaosCards.length) {
+        const chaosLabel = document.createElement("label");
+        chaosLabel.className = "deck";
+        chaosLabel.style.borderColor = "rgba(255,207,86,.5)";
+
+        const left = document.createElement("div");
+        const title = document.createElement("div");
+        title.style.fontWeight = "800";
+        title.style.fontSize = "13px";
+        title.style.color = "#ffe9a9";
+        title.textContent = "Chaos Cards";
+
+        const sub = document.createElement("div");
+        sub.className = "tiny";
+        sub.textContent = `${chaosCards.length} cards`;
+
+        left.appendChild(title);
+        left.appendChild(sub);
+
+        const right = document.createElement("div");
+        right.className = "row";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = chaosEnabled;
+        cb.addEventListener("change", () => {
+          chaosEnabled = cb.checked;
+          updateActionStates();
+        });
+
+        right.appendChild(cb);
+        chaosLabel.appendChild(left);
+        chaosLabel.appendChild(right);
+        deckList.appendChild(chaosLabel);
+      }
     }
 
-    function draw(clearExisting) {
+    function getUsedDecks() {
       const resultsEl = document.getElementById("results");
-      if (clearExisting) resultsEl.innerHTML = "";
+      return new Set(
+        Array.from(resultsEl.querySelectorAll("[data-deck]"))
+          .map(el => el.dataset.deck)
+          .filter(deck => deck && deck !== "CHAOS")
+      );
+    }
 
-      const availableDecks = Object.keys(decks).filter(d => selectedDecks.has(d));
-      if (!availableDecks.length) return;
+    function getAvailableDecks() {
+      const used = getUsedDecks();
+      return Object.keys(decks).filter(d => selectedDecks.has(d) && !used.has(d));
+    }
+
+    function updateActionStates() {
+      const drawBtn = document.getElementById("btnDraw");
+      const chaosBtn = document.getElementById("btnChaos");
+      const availableDecks = getAvailableDecks();
+      drawBtn.disabled = chaosUsed || availableDecks.length === 0;
+      chaosBtn.disabled = chaosUsed || !chaosEnabled || chaosCards.length === 0;
+    }
+
+    function drawNormal() {
+      const resultsEl = document.getElementById("results");
+      const availableDecks = getAvailableDecks();
+      if (!availableDecks.length || chaosUsed) return;
 
       const deckName = sample(availableDecks);
       resultsEl.appendChild(makeDrawnBox(deckName));
+      updateActionStates();
     }
 
     function makeDrawnBox(deckName) {
@@ -461,6 +599,7 @@
 
       const box = document.createElement("div");
       box.className = "card kara-card";
+      box.dataset.deck = deckName;
 
       const top = document.createElement("div");
       top.className = "row";
@@ -475,7 +614,9 @@
       reroll.textContent = "Reroll";
       reroll.style.padding = "7px 10px";
       reroll.style.borderRadius = "10px";
+      reroll.disabled = chaosUsed;
       reroll.addEventListener("click", () => {
+        if (chaosUsed) return;
         box.replaceWith(makeDrawnBox(deckName));
       });
 
@@ -516,29 +657,79 @@
       return box;
     }
 
+    function drawChaos() {
+      if (!chaosEnabled || chaosUsed || chaosCards.length === 0) return;
+      const resultsEl = document.getElementById("results");
+      const card = sample(chaosCards);
+      resultsEl.appendChild(makeChaosBox(card));
+      chaosUsed = true;
+      lockForChaos();
+    }
+
+    function makeChaosBox(card) {
+      const box = document.createElement("div");
+      box.className = "card chaos-card";
+      box.dataset.deck = "CHAOS";
+
+      const label = document.createElement("div");
+      label.className = "muted";
+      label.textContent = "Chaos Modifier";
+      label.style.fontWeight = "700";
+      box.appendChild(label);
+
+      const drawn = document.createElement("div");
+      drawn.className = "drawn";
+      drawn.textContent = card.title;
+      box.appendChild(drawn);
+
+      if (card.description) {
+        const desc = document.createElement("p");
+        desc.className = "chaos-desc";
+        desc.textContent = card.description;
+        box.appendChild(desc);
+      }
+
+      const lock = document.createElement("div");
+      lock.className = "chaos-lock";
+      lock.textContent = "Chaos locks the turn. No more cards can be drawn this round.";
+      box.appendChild(lock);
+
+      return box;
+    }
+
+    function lockForChaos() {
+      document.getElementById("btnDraw").disabled = true;
+      document.getElementById("btnChaos").disabled = true;
+      document.querySelectorAll("#results .btn.secondary").forEach(btn => {
+        if (btn.textContent === "Reroll") btn.disabled = true;
+      });
+    }
+
     /***********************
      * 6) EVENTS
      ***********************/
     document.getElementById("btnReload").addEventListener("click", loadAll);
-    document.getElementById("btnDraw").addEventListener("click", () => draw(true));
-    document.getElementById("btnChaos").addEventListener("click", () => draw(false));
+    document.getElementById("btnDraw").addEventListener("click", drawNormal);
+    document.getElementById("btnChaos").addEventListener("click", drawChaos);
     document.getElementById("btnReset").addEventListener("click", () => {
       document.getElementById("results").innerHTML = "";
+      chaosUsed = false;
+      updateActionStates();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
 
     document.getElementById("btnSelectAll").addEventListener("click", () => {
       selectedDecks = new Set(Object.keys(decks));
+      chaosEnabled = chaosCards.length > 0;
       renderDeckToggles();
-      document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
-      document.getElementById("btnChaos").disabled = selectedDecks.size === 0;
+      updateActionStates();
     });
 
     document.getElementById("btnSelectNone").addEventListener("click", () => {
       selectedDecks = new Set();
+      chaosEnabled = false;
       renderDeckToggles();
-      document.getElementById("btnDraw").disabled = true;
-      document.getElementById("btnChaos").disabled = true;
+      updateActionStates();
     });
 
     // Initial load
