@@ -5,68 +5,192 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Karaoguelike</title>
   <style>
-    :root { --pad: 14px; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#0b0c10; color:#f4f4f6; }
-    header { padding: 18px var(--pad); border-bottom: 1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center; justify-content:space-between; }
-    h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+    :root {
+      --pad: 16px;
+      --purple: #7f5bff;
+      --pink: #ff4fd8;
+      --aqua: #35f2ff;
+      --gold: #ffcf56;
+    }
+    body {
+      font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(127,91,255,.35), transparent 40%),
+        radial-gradient(circle at 90% 20%, rgba(255,79,216,.35), transparent 40%),
+        radial-gradient(circle at 30% 80%, rgba(53,242,255,.28), transparent 42%),
+        #07070d;
+      color:#f4f4f6;
+    }
+    header {
+      padding: 18px var(--pad);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      background: rgba(7,7,13,.85);
+      backdrop-filter: blur(8px);
+      z-index: 5;
+    }
+    h1 { font-size: 18px; margin: 0; font-weight: 750; letter-spacing: .6px; }
+    .subtitle { font-size: 12px; color: rgba(255,255,255,.7); }
     .wrap { padding: var(--pad); max-width: 1100px; margin: 0 auto; }
-    .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 14px; }
-    .grid { display:grid; grid-template-columns: 360px 1fr; gap: 14px; }
-    @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 20px 40px rgba(3,3,8,.35);
+    }
+    .grid { display:grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; }
+    @media (max-width: 900px){
+      .grid { grid-template-columns: 1fr; }
+      header { align-items: flex-start; }
+    }
 
-    .btn { background:#fff; color:#000; border:0; padding: 10px 12px; border-radius: 12px; font-weight: 650; cursor:pointer; }
-    .btn.secondary { background: rgba(255,255,255,.10); color:#fff; border: 1px solid rgba(255,255,255,.14); }
-    .btn:disabled { opacity: .55; cursor:not-allowed; }
+    .btn {
+      background: linear-gradient(120deg, #fff 0%, #f4f4f6 100%);
+      color:#101018;
+      border:0;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      cursor:pointer;
+      transition: transform .2s ease, box-shadow .2s ease;
+      box-shadow: 0 10px 18px rgba(255,255,255,.08);
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.10);
+      color:#fff;
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: none;
+    }
+    .btn.accent {
+      background: linear-gradient(120deg, var(--pink), var(--purple));
+      color:#fff;
+    }
+    .btn:disabled { opacity: .55; cursor:not-allowed; transform: none; }
+    .btn:hover:not(:disabled) { transform: translateY(-1px) scale(1.01); }
 
     .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
-    .muted { color: rgba(255,255,255,.70); font-size: 12px; line-height: 1.4; }
+    .muted { color: rgba(255,255,255,.75); font-size: 12px; line-height: 1.4; }
     .tiny { color: rgba(255,255,255,.55); font-size: 11px; }
 
-    .decklist { display:flex; flex-direction:column; gap: 10px; margin-top: 10px; }
-    label.deck { display:flex; justify-content:space-between; gap: 10px; align-items:center; padding: 10px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.03); }
-    label.deck input { transform: scale(1.1); }
-    .pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.85); }
+    .decklist { display:flex; flex-direction:column; gap: 10px; margin-top: 12px; }
+    label.deck {
+      display:flex;
+      justify-content:space-between;
+      gap: 10px;
+      align-items:center;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.03);
+      transition: border .2s ease, transform .2s ease;
+    }
+    label.deck:hover { border-color: rgba(255,255,255,.3); transform: translateY(-1px); }
+    label.deck input { transform: scale(1.15); accent-color: var(--pink); }
+    .pill {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.2);
+      color: rgba(255,255,255,.9);
+      background: rgba(255,255,255,.08);
+    }
 
     .results { display:flex; flex-direction:column; gap: 12px; }
     .resultTitle { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-    .resultTitle strong { font-size: 13px; }
-    .drawn { font-size: 20px; font-weight: 750; margin: 6px 0 0 0; letter-spacing: .2px; }
-    ul { margin: 8px 0 0 18px; }
-    li { margin: 4px 0; }
+    .resultTitle strong { font-size: 14px; }
+    .drawn {
+      font-size: 22px;
+      font-weight: 800;
+      margin: 10px 0 0 0;
+      letter-spacing: .4px;
+      text-shadow: 0 0 18px rgba(53,242,255,.35);
+    }
+    .kara-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+      background:
+        linear-gradient(140deg, rgba(255,255,255,.12), rgba(255,255,255,.02)),
+        linear-gradient(160deg, rgba(127,91,255,.25), rgba(255,79,216,.2));
+      border: 1px solid rgba(255,255,255,.2);
+      animation: float 4s ease-in-out infinite;
+    }
+    .kara-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 20%, rgba(255,255,255,.18) 45%, transparent 70%);
+      transform: translateX(-120%);
+      animation: shimmer 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .idea-list { margin: 10px 0 0 18px; }
+    .idea-list li { margin: 6px 0; }
+    .idea-btn { margin-top: 10px; }
 
     .error { color: #ffb3b3; }
     .ok { color: #b7ffcd; }
-    .spinner { display:inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    @keyframes shimmer { 0%, 100% { transform: translateX(-120%); } 45%, 60% { transform: translateX(120%); } }
 
-    code.inline { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 8px; }
+    .hero {
+      display:flex;
+      flex-direction:column;
+      gap: 12px;
+    }
+    .hero h2 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: .3px;
+    }
+    .hero p { margin: 0; font-size: 13px; color: rgba(255,255,255,.75); }
+
+    .sticky-actions {
+      position: sticky;
+      bottom: 12px;
+      padding-top: 8px;
+    }
+
+    @media (max-width: 600px) {
+      .row.full-mobile { flex-direction: column; align-items: stretch; }
+      .row.full-mobile .btn { width: 100%; justify-content: center; }
+      .drawn { font-size: 20px; }
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>Karaoguelike</h1>
-    <div class="row">
+    <div class="row full-mobile">
       <button class="btn secondary" id="btnReload">Reload data</button>
-      <button class="btn" id="btnDraw" disabled>Draw cards</button>
+      <button class="btn accent" id="btnDraw" disabled>Draw a card</button>
+      <button class="btn secondary" id="btnChaos" disabled>Add chaos card</button>
+      <button class="btn secondary" id="btnReset">End turn</button>
     </div>
   </header>
 
   <div class="wrap">
     <div class="grid">
       <div class="card">
-        <div class="row" style="justify-content:space-between;">
-          <div>
-            <div class="muted">Data source</div>
-            <div class="tiny">Google Sheets → <b>published CSV</b> (no login / no CORS redirect)</div>
+        <div class="hero">
+          <div class="row" style="justify-content:space-between; align-items:flex-start;">
+            <div>
+              <h2>Shuffle the karaoke chaos ✨</h2>
+              <p>Pick your decks, draw one card at a time, and stack extra chaos when you want more spice.</p>
+            </div>
+            <div id="status" class="pill">Not loaded</div>
           </div>
-          <div id="status" class="pill">Not loaded</div>
-        </div>
-
-        <div style="margin-top:12px;">
-          <div class="muted">Configure</div>
-          <div class="tiny" style="margin-top:6px;">
-            Update the <code class="inline">CSV_URLS</code> object in the script if your sheet links change.
-          </div>
+          <p>Reroll any card until the combo sings, then end the turn so the next performer can customize their own draw.</p>
         </div>
 
         <div style="margin-top:14px;">
@@ -89,7 +213,7 @@
       <div class="card">
         <div class="resultTitle">
           <strong>Draw</strong>
-          <span class="tiny">Suggestions will appear if found in the matching tab.</span>
+          <span class="tiny">One card at a time. Add chaos when you want more.</span>
         </div>
         <div class="results" id="results" style="margin-top:10px;"></div>
       </div>
@@ -198,6 +322,7 @@
       errEl.textContent = "";
       setStatus("Loading…", true);
       document.getElementById("btnDraw").disabled = true;
+      document.getElementById("btnChaos").disabled = true;
       document.getElementById("deckList").innerHTML = "";
       document.getElementById("results").innerHTML = "";
 
@@ -261,6 +386,7 @@
         renderDeckToggles();
         setStatus("Loaded", true);
         document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
+        document.getElementById("btnChaos").disabled = selectedDecks.size === 0;
       } catch (e) {
         setStatus("Error", false);
         errEl.textContent = e?.message || String(e);
@@ -300,10 +426,6 @@
         const right = document.createElement("div");
         right.className = "row";
 
-        const pill = document.createElement("span");
-        pill.className = "pill";
-        pill.textContent = suggestions[deckName] ? "has suggestions" : "no suggestions";
-
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = selectedDecks.has(deckName);
@@ -311,9 +433,9 @@
           if (cb.checked) selectedDecks.add(deckName);
           else selectedDecks.delete(deckName);
           document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
+          document.getElementById("btnChaos").disabled = selectedDecks.size === 0;
         });
 
-        right.appendChild(pill);
         right.appendChild(cb);
 
         label.appendChild(left);
@@ -322,18 +444,15 @@
       }
     }
 
-    function draw() {
+    function draw(clearExisting) {
       const resultsEl = document.getElementById("results");
-      resultsEl.innerHTML = "";
+      if (clearExisting) resultsEl.innerHTML = "";
 
-      // draw in default order first
-      for (const deckName of DEFAULT_DECK_ORDER.filter(d => selectedDecks.has(d))) {
-        resultsEl.appendChild(makeDrawnBox(deckName));
-      }
-      // then any extras
-      for (const deckName of Object.keys(decks).filter(d => selectedDecks.has(d) && !DEFAULT_DECK_ORDER.includes(d))) {
-        resultsEl.appendChild(makeDrawnBox(deckName));
-      }
+      const availableDecks = Object.keys(decks).filter(d => selectedDecks.has(d));
+      if (!availableDecks.length) return;
+
+      const deckName = sample(availableDecks);
+      resultsEl.appendChild(makeDrawnBox(deckName));
     }
 
     function makeDrawnBox(deckName) {
@@ -341,9 +460,7 @@
       const cardName = sample(cards);
 
       const box = document.createElement("div");
-      box.className = "card";
-      box.style.background = "rgba(255,255,255,.03)";
-      box.style.borderColor = "rgba(255,255,255,.10)";
+      box.className = "card kara-card";
 
       const top = document.createElement("div");
       top.className = "row";
@@ -373,19 +490,27 @@
 
       const suggList = suggestions[deckName]?.get(cardName) || [];
       if (suggList.length) {
+        const ideaBtn = document.createElement("button");
+        ideaBtn.className = "btn secondary idea-btn";
+        ideaBtn.textContent = "Need ideas? Click here!";
+
         const ul = document.createElement("ul");
+        ul.className = "idea-list";
+        ul.hidden = true;
+
         for (const s of suggList) {
           const li = document.createElement("li");
           li.textContent = s;
           ul.appendChild(li);
         }
+
+        ideaBtn.addEventListener("click", () => {
+          ul.hidden = !ul.hidden;
+          ideaBtn.textContent = ul.hidden ? "Need ideas? Click here!" : "Hide ideas";
+        });
+
+        box.appendChild(ideaBtn);
         box.appendChild(ul);
-      } else {
-        const none = document.createElement("div");
-        none.className = "tiny";
-        none.style.marginTop = "8px";
-        none.textContent = "No suggestions found for this card.";
-        box.appendChild(none);
       }
 
       return box;
@@ -395,18 +520,25 @@
      * 6) EVENTS
      ***********************/
     document.getElementById("btnReload").addEventListener("click", loadAll);
-    document.getElementById("btnDraw").addEventListener("click", draw);
+    document.getElementById("btnDraw").addEventListener("click", () => draw(true));
+    document.getElementById("btnChaos").addEventListener("click", () => draw(false));
+    document.getElementById("btnReset").addEventListener("click", () => {
+      document.getElementById("results").innerHTML = "";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
 
     document.getElementById("btnSelectAll").addEventListener("click", () => {
       selectedDecks = new Set(Object.keys(decks));
       renderDeckToggles();
       document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
+      document.getElementById("btnChaos").disabled = selectedDecks.size === 0;
     });
 
     document.getElementById("btnSelectNone").addEventListener("click", () => {
       selectedDecks = new Set();
       renderDeckToggles();
       document.getElementById("btnDraw").disabled = true;
+      document.getElementById("btnChaos").disabled = true;
     });
 
     // Initial load
