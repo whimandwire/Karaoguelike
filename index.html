@@ -57,7 +57,7 @@
         <div class="row" style="justify-content:space-between;">
           <div>
             <div class="muted">Data source</div>
-            <div class="tiny">Google Sheets → published CSV</div>
+            <div class="tiny">Google Sheets → <b>published CSV</b> (no login / no CORS redirect)</div>
           </div>
           <div id="status" class="pill">Not loaded</div>
         </div>
@@ -65,7 +65,7 @@
         <div style="margin-top:12px;">
           <div class="muted">Configure</div>
           <div class="tiny" style="margin-top:6px;">
-            Fill in <code class="inline">SHEET_ID</code> and <code class="inline">GIDS</code> in the script.
+            Update the <code class="inline">CSV_URLS</code> object in the script if your sheet links change.
           </div>
         </div>
 
@@ -98,55 +98,62 @@
 
   <script>
     /***********************
-     * 1) PUT YOUR SHEET INFO HERE
+     * 1) PUT YOUR PUBLISHED CSV LINKS HERE
+     * (these are your links; do not swap to /spreadsheets/d/.../export)
      ***********************/
-    const SHEET_ID = "1VVc9gd_vKWa1xQie_Kp1UW07fuZbb8HgiOvdW4dPVGQ";
-
-    // gid values for each tab (get them from the URL when viewing that tab)
-    const GIDS = {
-      MAIN: "210868448",                 // e.g. "0"
-      "Artist Category": "2134899012",
-      "Specific Artist": "933810467",
-      "Era": "2053657456",
-      "Genre": "308425524",
-      "Prompt": "1185779772",
-      "Song Title Rule": "186500093"
+    const CSV_URLS = {
+      "MAIN": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=210868448&single=true&output=csv",
+      "Artist Category": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=2134899012&single=true&output=csv",
+      "Specific Artist": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=933810467&single=true&output=csv",
+      "Era": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=2053657456&single=true&output=csv",
+      "Genre": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=308425524&single=true&output=csv",
+      "Prompt": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=1185779772&single=true&output=csv",
+      "Song Title Rule": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRCJK_-jJKTBYKiYVQz67eXaufFV6z6wxfWY8PFuhPhVp1xOv9dPhJefpJe_RziTvYELRGsHKGRErh6/pub?gid=186500093&single=true&output=csv"
     };
 
     /***********************
      * 2) HELPERS
      ***********************/
-    function csvUrl(gid) {
-      return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+    async function fetchCsv(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Fetch failed (${res.status}). Check that the tab is published as CSV.`);
+      return await res.text();
     }
 
+    // Robust CSV parser: handles quoted commas and quoted newlines.
     function parseCSV(text) {
-      // Simple CSV parser (handles quotes + commas).
-      // If you ever use newlines inside quoted cells, we can swap to a heavier parser.
       const rows = [];
-      let row = [], cell = "", inQuotes = false;
+      let row = [];
+      let cur = "";
+      let inQuotes = false;
 
       for (let i = 0; i < text.length; i++) {
-        const c = text[i];
+        const ch = text[i];
         const next = text[i + 1];
 
-        if (c === '"' ) {
-          if (inQuotes && next === '"') { cell += '"'; i++; }
-          else { inQuotes = !inQuotes; }
-        } else if (c === ',' && !inQuotes) {
-          row.push(cell); cell = "";
-        } else if ((c === '\n' || c === '\r') && !inQuotes) {
-          if (c === '\r' && next === '\n') i++;
-          row.push(cell); cell = "";
-          if (row.length > 1 || row[0] !== "") rows.push(row);
-          row = [];
-        } else {
-          cell += c;
+        if (ch === '"' && inQuotes && next === '"') { cur += '"'; i++; continue; }
+        if (ch === '"') { inQuotes = !inQuotes; continue; }
+
+        if (ch === ',' && !inQuotes) {
+          row.push(cur); cur = "";
+          continue;
         }
+
+        if ((ch === '\n' || ch === '\r') && !inQuotes) {
+          if (ch === '\r' && next === '\n') i++;
+          row.push(cur); cur = "";
+          // ignore completely empty trailing line
+          if (row.some(cell => (cell ?? "").trim() !== "")) rows.push(row.map(x => (x ?? "").trim()));
+          row = [];
+          continue;
+        }
+
+        cur += ch;
       }
-      // last cell
-      if (cell.length || row.length) { row.push(cell); rows.push(row); }
-      return rows.map(r => r.map(x => (x ?? "").trim()));
+
+      row.push(cur);
+      if (row.some(cell => (cell ?? "").trim() !== "")) rows.push(row.map(x => (x ?? "").trim()));
+      return rows;
     }
 
     function uniq(arr) {
@@ -160,7 +167,18 @@
     function setStatus(text, ok=true) {
       const el = document.getElementById("status");
       el.textContent = text;
-      el.className = "pill " + (ok ? "ok" : "");
+      el.className = "pill" + (ok ? " ok" : "");
+    }
+
+    function normalizeKey(s) {
+      return (s ?? "").trim();
+    }
+
+    function splitSuggestionsCell(s) {
+      const raw = (s ?? "").trim();
+      if (!raw) return [];
+      // split on ; | or line breaks if someone pasted multiple suggestions into one cell
+      return raw.split(/[;|]\s*|\r?\n/).map(x => x.trim()).filter(Boolean);
     }
 
     /***********************
@@ -184,61 +202,60 @@
       document.getElementById("results").innerHTML = "";
 
       try {
-        // Load MAIN
-        if (!SHEET_ID.includes("PASTE") && GIDS.MAIN && !GIDS.MAIN.includes("PASTE")) {
-          // ok
-        } else {
-          throw new Error("You still need to paste your SHEET_ID and gid values into the script.");
-        }
+        if (!CSV_URLS.MAIN) throw new Error("Missing CSV_URLS.MAIN.");
 
-        const mainResp = await fetch(csvUrl(GIDS.MAIN));
-        if (!mainResp.ok) throw new Error("Couldn't fetch MAIN. Make sure the sheet is published and gid is correct.");
-        const mainText = await mainResp.text();
+        // --- Load MAIN ---
+        const mainText = await fetchCsv(CSV_URLS.MAIN);
         const mainRows = parseCSV(mainText);
+        if (mainRows.length < 2) throw new Error("MAIN tab returned no rows. Is it published correctly?");
 
-        // Expect headers in row 0
-        const headers = mainRows[0];
+        const headers = mainRows[0].map(h => (h ?? "").trim());
         const dataRows = mainRows.slice(1);
 
-        // Build decks from columns: each header is a deck name; cards are unique non-empty cells under it.
         decks = {};
         headers.forEach((h, idx) => {
+          if (!h) return;
           const colCards = uniq(dataRows.map(r => (r[idx] || "").trim()).filter(Boolean));
-          if (h && colCards.length) decks[h] = colCards;
+          if (colCards.length) decks[h] = colCards;
         });
 
-        // Deck selection defaults: all on
+        if (!Object.keys(decks).length) throw new Error("No decks found in MAIN. Check your header row and data.");
+
+        // default selection: all on
         selectedDecks = new Set(Object.keys(decks));
 
-        // Load suggestions tabs
+        // --- Load Suggestions Tabs ---
         suggestions = {};
         for (const deckName of Object.keys(decks)) {
-          if (!GIDS[deckName]) continue; // no matching tab
-          const gid = GIDS[deckName];
-          if (!gid || gid.includes("PASTE")) continue;
+          const url = CSV_URLS[deckName];
+          if (!url) continue; // no matching suggestions tab
 
-          const resp = await fetch(csvUrl(gid));
-          if (!resp.ok) continue;
-          const text = await resp.text();
+          let text;
+          try {
+            text = await fetchCsv(url);
+          } catch {
+            continue; // don't fail whole app if one tab isn't published
+          }
+
           const rows = parseCSV(text);
           if (rows.length < 2) continue;
 
-          // Expect first column = card name, remaining columns = suggestions (or a single "Suggestions" cell).
           const map = new Map();
           for (const r of rows.slice(1)) {
-            const key = (r[0] || "").trim();
+            const key = normalizeKey(r[0]);
             if (!key) continue;
-            const rest = r.slice(1).filter(Boolean).map(x => x.trim());
-            // If they used one cell with multiple suggestions separated by ";" or "|", split it
+
+            const rest = r.slice(1).map(x => (x ?? "").trim()).filter(Boolean);
+
+            // If they used one "Suggestions" cell, split it; else treat each column as a suggestion.
             let sugg = [];
-            if (rest.length === 1 && (rest[0].includes(";") || rest[0].includes("|"))) {
-              sugg = rest[0].split(/[;|]/).map(s => s.trim()).filter(Boolean);
-            } else {
-              sugg = rest;
-            }
-            map.set(key, sugg);
+            if (rest.length === 1) sugg = splitSuggestionsCell(rest[0]);
+            else sugg = rest.flatMap(cell => splitSuggestionsCell(cell));
+
+            if (sugg.length) map.set(key, sugg);
           }
-          suggestions[deckName] = map;
+
+          if (map.size) suggestions[deckName] = map;
         }
 
         renderDeckToggles();
@@ -246,7 +263,7 @@
         document.getElementById("btnDraw").disabled = selectedDecks.size === 0;
       } catch (e) {
         setStatus("Error", false);
-        errEl.textContent = e.message || String(e);
+        errEl.textContent = e?.message || String(e);
       }
     }
 
@@ -263,6 +280,7 @@
 
       for (const deckName of ordered) {
         const count = decks[deckName]?.length ?? 0;
+
         const label = document.createElement("label");
         label.className = "deck";
 
@@ -281,6 +299,7 @@
 
         const right = document.createElement("div");
         right.className = "row";
+
         const pill = document.createElement("span");
         pill.className = "pill";
         pill.textContent = suggestions[deckName] ? "has suggestions" : "no suggestions";
@@ -307,76 +326,17 @@
       const resultsEl = document.getElementById("results");
       resultsEl.innerHTML = "";
 
+      // draw in default order first
       for (const deckName of DEFAULT_DECK_ORDER.filter(d => selectedDecks.has(d))) {
-        addDrawnCard(deckName);
+        resultsEl.appendChild(makeDrawnBox(deckName));
       }
-      // Any additional decks not in default order:
+      // then any extras
       for (const deckName of Object.keys(decks).filter(d => selectedDecks.has(d) && !DEFAULT_DECK_ORDER.includes(d))) {
-        addDrawnCard(deckName);
+        resultsEl.appendChild(makeDrawnBox(deckName));
       }
-    }
-
-    function addDrawnCard(deckName) {
-      const cards = decks[deckName] || [];
-      if (!cards.length) return;
-
-      const cardName = sample(cards);
-
-      const box = document.createElement("div");
-      box.className = "card";
-      box.style.background = "rgba(255,255,255,.03)";
-      box.style.borderColor = "rgba(255,255,255,.10)";
-
-      const top = document.createElement("div");
-      top.className = "row";
-      top.style.justifyContent = "space-between";
-
-      const label = document.createElement("div");
-      label.className = "muted";
-      label.textContent = deckName;
-
-      const reroll = document.createElement("button");
-      reroll.className = "btn secondary";
-      reroll.textContent = "Reroll";
-      reroll.style.padding = "7px 10px";
-      reroll.style.borderRadius = "10px";
-      reroll.addEventListener("click", () => {
-        // replace this box contents with a new draw
-        box.replaceWith(makeDrawnBox(deckName));
-      });
-
-      top.appendChild(label);
-      top.appendChild(reroll);
-
-      box.appendChild(top);
-
-      const drawn = document.createElement("div");
-      drawn.className = "drawn";
-      drawn.textContent = cardName;
-      box.appendChild(drawn);
-
-      const suggList = suggestions[deckName]?.get(cardName) || [];
-      if (suggList.length) {
-        const ul = document.createElement("ul");
-        for (const s of suggList) {
-          const li = document.createElement("li");
-          li.textContent = s;
-          ul.appendChild(li);
-        }
-        box.appendChild(ul);
-      } else {
-        const none = document.createElement("div");
-        none.className = "tiny";
-        none.style.marginTop = "8px";
-        none.textContent = "No suggestions found for this card.";
-        box.appendChild(none);
-      }
-
-      document.getElementById("results").appendChild(box);
     }
 
     function makeDrawnBox(deckName) {
-      // helper used by reroll
       const cards = decks[deckName] || [];
       const cardName = sample(cards);
 
@@ -404,7 +364,6 @@
 
       top.appendChild(label);
       top.appendChild(reroll);
-
       box.appendChild(top);
 
       const drawn = document.createElement("div");
