@@ -89,6 +89,7 @@
     .tiny { color: rgba(255,255,255,.55); font-size: 11px; }
 
     .decklist { display:flex; flex-direction:column; gap: 10px; margin-top: 12px; }
+    .decklist.hidden { display: none; }
     label.deck {
       display:flex;
       justify-content:space-between;
@@ -203,6 +204,18 @@
       padding-top: 8px;
     }
 
+    .deck-controls {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .deck-actions.hidden {
+      display: none;
+    }
+
     @media (max-width: 600px) {
       .row.full-mobile { flex-direction: column; align-items: stretch; }
       .row.full-mobile .btn { width: 100%; justify-content: center; }
@@ -236,11 +249,14 @@
         </div>
 
         <div style="margin-top:14px;">
-          <div class="muted">Decks in play</div>
+          <div class="deck-controls">
+            <div class="muted">Decks in play</div>
+            <button class="btn secondary" id="btnToggleDecks" type="button">Hide decks</button>
+          </div>
           <div class="decklist" id="deckList"></div>
         </div>
 
-        <div style="margin-top:14px;" class="row">
+        <div style="margin-top:14px;" class="row deck-actions" id="deckActions">
           <button class="btn secondary" id="btnSelectAll">Select all</button>
           <button class="btn secondary" id="btnSelectNone">Select none</button>
         </div>
@@ -360,6 +376,7 @@
     let chaosEnabled = true;
     let drawnDecks = new Set();
     let chaosDrawn = false;
+    let decksVisible = true;
 
     const DEFAULT_DECK_ORDER = ["Artist Category", "Specific Artist", "Era", "Genre", "Prompt", "Song Title Rule"];
 
@@ -555,6 +572,17 @@
       btnChaos.disabled = chaosDrawn || !chaosEnabled || chaosCards.length === 0 || drawnDecks.size === 0;
     }
 
+    function updateDeckVisibility() {
+      const deckList = document.getElementById("deckList");
+      const deckActions = document.getElementById("deckActions");
+      const toggleBtn = document.getElementById("btnToggleDecks");
+
+      deckList.classList.toggle("hidden", !decksVisible);
+      deckActions.classList.toggle("hidden", !decksVisible);
+      toggleBtn.textContent = decksVisible ? "Hide decks" : "Show decks";
+      toggleBtn.setAttribute("aria-expanded", decksVisible ? "true" : "false");
+    }
+
     function drawCard() {
       const resultsEl = document.getElementById("results");
 
@@ -698,8 +726,14 @@
       updateActionState();
     });
 
+    document.getElementById("btnToggleDecks").addEventListener("click", () => {
+      decksVisible = !decksVisible;
+      updateDeckVisibility();
+    });
+
     // Initial load
     loadAll();
+    updateDeckVisibility();
   </script>
 </body>
 </html>
